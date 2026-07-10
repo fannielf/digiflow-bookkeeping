@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: digiflow-books
+  datasource:
+    url: jdbc:postgresql://localhost:5435/digiflow_books
+    username: books
+    password: books
+  jpa:
+    hibernate:
+      # 'update' is convenient while developing solo.
+      # Learning exercise: replace with Flyway migrations and set this to 'validate'.
+      ddl-auto: update
+  # spring-boot-docker-compose auto-detects docker-compose.yml in the working
+  # directory and starts Postgres for you. Run the app from the bookkeeping/ folder.
+  thymeleaf:
+    cache: false
+
+server:
+  port: 8080

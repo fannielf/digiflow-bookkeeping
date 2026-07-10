@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Kirjaus')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1 th:text="${entry.id == null} ? 'Uusi kirjaus' : 'Muokkaa kirjausta'">Uusi kirjaus</h1>
+
+    <form th:action="@{/ledger/save}" th:object="${entry}" method="post">
+        <input type="hidden" th:field="*{id}">
+        <input type="hidden" th:field="*{voucherNumber}">
+        <input type="hidden" th:field="*{invoiceId}">
+
+        <label for="date">Päivämäärä</label>
+        <input type="date" th:field="*{date}" id="date" required>
+        <span class="field-error" th:if="${#fields.hasErrors('date')}" th:errors="*{date}"></span>
+
+        <label for="type">Laji</label>
+        <select th:field="*{type}" id="type">
+            <option th:each="t : ${types}" th:value="${t}" th:text="${t.label}">Meno</option>
+        </select>
+
+        <label for="description">Selite</label>
+        <input type="text" th:field="*{description}" id="description"
+               placeholder="esim. Verkkotunnuksen vuosimaksu" required>
+        <span class="field-error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></span>
+
+        <label for="counterparty">Maksaja / saaja</label>
+        <input type="text" th:field="*{counterparty}" id="counterparty" placeholder="esim. Louhi Oy">
+
+        <label for="grossAmount">Summa sis. alv (€)</label>
+        <input type="number" step="0.01" min="0.01" th:field="*{grossAmount}" id="grossAmount" required>
+        <span class="field-error" th:if="${#fields.hasErrors('grossAmount')}" th:errors="*{grossAmount}"></span>
+
+        <label for="vatRate">ALV-kanta</label>
+        <!-- Bound by name, not th:field: BigDecimal 25.50 (from DB, scale 2) would not
+             match option value "25.5" in Thymeleaf's selected-value comparison. -->
+        <select name="vatRate" id="vatRate">
+            <option th:each="rate : ${vatRates}" th:value="${rate}"
+                    th:selected="${entry.vatRate != null && entry.vatRate.compareTo(rate) == 0}"
+                    th:text="${#numbers.formatDecimal(rate, 1, 1)} + ' %'">25,5 %</option>
+        </select>
+        <p class="hint">Jos et ole alv-rekisterissä, valitse 0 %. Veroton osuus ja alv lasketaan automaattisesti.</p>
+
+        <div class="actions">
+            <button class="btn" type="submit">Tallenna</button>
+            <a class="btn secondary" th:href="@{/ledger}">Peruuta</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Asetukset')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1>Yrityksen tiedot</h1>
+    <p class="hint">Nämä tiedot tulostuvat laskuillesi.</p>
+
+    <form th:action="@{/settings}" th:object="${profile}" method="post">
+        <label for="businessName">Toiminimi</label>
+        <input type="text" th:field="*{businessName}" id="businessName" required>
+        <span class="field-error" th:if="${#fields.hasErrors('businessName')}" th:errors="*{businessName}"></span>
+
+        <label for="ownerName">Yrittäjän nimi</label>
+        <input type="text" th:field="*{ownerName}" id="ownerName">
+
+        <label for="businessId">Y-tunnus</label>
+        <input type="text" th:field="*{businessId}" id="businessId" placeholder="1234567-8" required>
+        <span class="field-error" th:if="${#fields.hasErrors('businessId')}" th:errors="*{businessId}"></span>
+
+        <label for="streetAddress">Katuosoite</label>
+        <input type="text" th:field="*{streetAddress}" id="streetAddress">
+
+        <label for="postalCode">Postinumero</label>
+        <input type="text" th:field="*{postalCode}" id="postalCode">
+
+        <label for="city">Paikkakunta</label>
+        <input type="text" th:field="*{city}" id="city">
+
+        <label for="email">Sähköposti</label>
+        <input type="email" th:field="*{email}" id="email">
+
+        <label for="phone">Puhelin</label>
+        <input type="text" th:field="*{phone}" id="phone">
+
+        <label for="iban">IBAN-tilinumero</label>
+        <input type="text" th:field="*{iban}" id="iban" placeholder="FI12 3456 7890 1234 56">
+
+        <label for="bic">BIC</label>
+        <input type="text" th:field="*{bic}" id="bic" placeholder="OKOYFIHH">
+
+        <label for="defaultPaymentTermDays">Maksuehto (päivää)</label>
+        <input type="number" min="0" th:field="*{defaultPaymentTermDays}" id="defaultPaymentTermDays" required>
+        <span class="field-error" th:if="${#fields.hasErrors('defaultPaymentTermDays')}"
+              th:errors="*{defaultPaymentTermDays}"></span>
+
+        <div class="checkbox-row">
+            <input type="checkbox" th:field="*{vatRegistered}" id="vatRegistered">
+            <label for="vatRegistered">Olen arvonlisäverovelvollisten rekisterissä</label>
+        </div>
+        <p class="hint">
+            Kun tämä on pois päältä, laskut tehdään 0 %:n verokannalla ja niihin
+            lisätään merkintä verottomuudesta (AVL 3 §).
+        </p>
+
+        <div class="actions">
+            <button class="btn" type="submit">Tallenna</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

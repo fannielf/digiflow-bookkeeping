@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Asiakas')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1 th:text="${customer.id == null} ? 'Uusi asiakas' : 'Muokkaa asiakasta'">Uusi asiakas</h1>
+
+    <form th:action="@{/customers/save}" th:object="${customer}" method="post">
+        <input type="hidden" th:field="*{id}">
+
+        <label for="name">Nimi</label>
+        <input type="text" th:field="*{name}" id="name" required>
+        <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
+
+        <label for="businessId">Y-tunnus</label>
+        <input type="text" th:field="*{businessId}" id="businessId" placeholder="1234567-8">
+
+        <label for="streetAddress">Katuosoite</label>
+        <input type="text" th:field="*{streetAddress}" id="streetAddress">
+
+        <label for="postalCode">Postinumero</label>
+        <input type="text" th:field="*{postalCode}" id="postalCode">
+
+        <label for="city">Paikkakunta</label>
+        <input type="text" th:field="*{city}" id="city">
+
+        <label for="email">Sähköposti</label>
+        <input type="email" th:field="*{email}" id="email">
+
+        <div class="actions">
+            <button class="btn" type="submit">Tallenna</button>
+            <a class="btn secondary" th:href="@{/customers}">Peruuta</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

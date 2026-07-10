@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' – DigiFlow Books'">DigiFlow Books</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<nav th:fragment="nav" class="topnav no-print">
+    <div class="nav-inner">
+        <a class="brand" th:href="@{/}">DigiFlow&nbsp;Books</a>
+        <a th:href="@{/ledger}">Kirjanpito</a>
+        <a th:href="@{/invoices}">Laskut</a>
+        <a th:href="@{/customers}">Asiakkaat</a>
+        <a th:href="@{/reports/vat}">ALV-yhteenveto</a>
+        <a th:href="@{/settings}">Asetukset</a>
+    </div>
+</nav>
+
+<div th:fragment="messages">
+    <div class="flash success" th:if="${message}" th:text="${message}">OK</div>
+    <div class="flash error" th:if="${error}" th:text="${error}">Virhe</div>
+</div>
+
+</body>
+</html>

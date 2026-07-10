@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Laskut')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1>Laskut</h1>
+
+    <div class="actions">
+        <a class="btn" th:href="@{/invoices/new}">+ Uusi lasku</a>
+    </div>
+
+    <p class="hint" th:if="${#lists.isEmpty(invoices)}">Ei laskuja vielä. Luo ensin asiakas, sitten lasku.</p>
+    <table th:unless="${#lists.isEmpty(invoices)}">
+        <thead>
+        <tr>
+            <th>Nro</th>
+            <th>Asiakas</th>
+            <th>Pvm</th>
+            <th>Eräpäivä</th>
+            <th>Tila</th>
+            <th class="num">Summa</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="invoice : ${invoices}">
+            <td><a th:href="@{/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">101</a></td>
+            <td th:text="${invoice.customer.name}">Asiakas</td>
+            <td th:text="${#temporals.format(invoice.issueDate, 'd.M.yyyy')}">1.1.2026</td>
+            <td th:text="${#temporals.format(invoice.dueDate, 'd.M.yyyy')}">15.1.2026</td>
+            <td>
+                <span class="badge overdue" th:if="${invoice.overdue}">Erääntynyt</span>
+                <span class="badge" th:unless="${invoice.overdue}"
+                      th:classappend="${invoice.status.name() == 'PAID'} ? 'paid' : (${invoice.status.name() == 'SENT'} ? 'sent' : 'draft')"
+                      th:text="${invoice.status.label}">Luonnos</span>
+            </td>
+            <td class="num" th:text="${#numbers.formatDecimal(invoice.grossTotal, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'">0,00 €</td>
+            <td><a class="btn small secondary" th:href="@{/invoices/{id}(id=${invoice.id})}">Avaa</a></td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>

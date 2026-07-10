@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Lasku ' + ${invoice.invoiceNumber})}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div class="no-print">
+        <div th:replace="~{fragments :: messages}"></div>
+
+        <div class="actions">
+            <a class="btn secondary" th:href="@{/invoices}">← Laskut</a>
+            <span class="badge overdue" th:if="${invoice.overdue}">Erääntynyt</span>
+            <span class="badge" th:unless="${invoice.overdue}"
+                  th:classappend="${invoice.status.name() == 'PAID'} ? 'paid' : (${invoice.status.name() == 'SENT'} ? 'sent' : 'draft')"
+                  th:text="${invoice.status.label}">Luonnos</span>
+
+            <a class="btn secondary" th:if="${invoice.status.name() == 'DRAFT'}"
+               th:href="@{/invoices/{id}/edit(id=${invoice.id})}">Muokkaa</a>
+            <form class="inline" th:if="${invoice.status.name() == 'DRAFT'}"
+                  th:action="@{/invoices/{id}/send(id=${invoice.id})}" method="post">
+                <button class="btn" type="submit">Merkitse lähetetyksi</button>
+            </form>
+            <form class="inline" th:if="${invoice.status.name() == 'SENT'}"
+                  th:action="@{/invoices/{id}/pay(id=${invoice.id})}" method="post">
+                <button class="btn" type="submit">Merkitse maksetuksi</button>
+            </form>
+            <form class="inline" th:if="${invoice.status.name() == 'DRAFT'}"
+                  th:action="@{/invoices/{id}/delete(id=${invoice.id})}" method="post"
+                  onsubmit="return confirm('Poistetaanko luonnos?');">
+                <button class="btn danger" type="submit">Poista</button>
+            </form>
+            <button class="btn secondary" type="button" onclick="window.print()">Tulosta / PDF</button>
+        </div>
+        <p class="hint" th:if="${invoice.status.name() == 'PAID'}"
+           th:text="'Maksettu ' + ${#temporals.format(invoice.paidDate, 'd.M.yyyy')} + '. Tulo on kirjattu kirjanpitoon.'"></p>
+    </div>
+
+    <div class="invoice-sheet">
+        <div class="invoice-header">
+            <div>
+                <h1>LASKU</h1>
+                <strong th:text="${profile.businessName}">Toiminimi</strong><br>
+                <span th:if="${profile.streetAddress}" th:text="${profile.streetAddress}"></span><br th:if="${profile.streetAddress}">
+                <span th:if="${profile.postalCode}" th:text="${profile.postalCode} + ' ' + ${profile.city}"></span><br th:if="${profile.postalCode}">
+                <span th:text="'Y-tunnus: ' + ${profile.businessId}">Y-tunnus</span><br>
+                <span th:if="${profile.vatRegistered}" th:text="'ALV-tunniste: ' + ${profile.vatId}"></span>
+            </div>
+            <div>
+                <table class="invoice-meta">
+                    <tr><td>Laskun numero</td><td th:text="${invoice.invoiceNumber}">101</td></tr>
+                    <tr><td>Päiväys</td><td th:text="${#temporals.format(invoice.issueDate, 'd.M.yyyy')}">1.1.2026</td></tr>
+                    <tr><td>Eräpäivä</td><td th:text="${#temporals.format(invoice.dueDate, 'd.M.yyyy')}">15.1.2026</td></tr>
+                    <tr><td>Viitenumero</td><td th:text="${invoice.referenceNumber}">1012</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <h2>Laskun saaja</h2>
+        <div>
+            <strong th:text="${invoice.customer.name}">Asiakas Oy</strong><br>
+            <span th:if="${invoice.customer.businessId}" th:text="'Y-tunnus: ' + ${invoice.customer.businessId}"></span><br th:if="${invoice.customer.businessId}">
+            <span th:if="${invoice.customer.streetAddress}" th:text="${invoice.customer.streetAddress}"></span><br th:if="${invoice.customer.streetAddress}">
+            <span th:if="${invoice.customer.postalCode}" th:text="${invoice.customer.postalCode} + ' ' + ${invoice.customer.city}"></span>
+        </div>
+
+        <h2>Erittely</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Kuvaus</th>
+                <th class="num">Määrä</th>
+                <th class="num">á-hinta</th>
+                <th class="num">ALV %</th>
+                <th class="num">Veroton</th>
+                <th class="num">ALV</th>
+                <th class="num">Yhteensä</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="line : ${invoice.lines}">
+                <td th:text="${line.description}">Työ</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.quantity, 1, 'WHITESPACE', 2, 'COMMA')}">1,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.unitPrice, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.vatRate, 1, 1)}">25,5</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.netTotal, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.vatTotal, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(line.grossTotal, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+            </tr>
+            <tr th:each="group : ${invoice.totalsByRate}">
+                <td colspan="4" th:text="'ALV ' + ${#numbers.formatDecimal(group.key, 1, 1)} + ' %'">ALV 25,5 %</td>
+                <td class="num" th:text="${#numbers.formatDecimal(group.value[0], 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(group.value[1], 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num"></td>
+            </tr>
+            <tr class="totals">
+                <td colspan="4">Maksettava yhteensä</td>
+                <td class="num" th:text="${#numbers.formatDecimal(invoice.netTotal, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(invoice.vatTotal, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+                <td class="num" th:text="${#numbers.formatDecimal(invoice.grossTotal, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'">0,00 €</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p th:unless="${profile.vatRegistered}" class="hint">
+            Ei arvonlisäveroa – myyjä ei ole arvonlisäverovelvollinen (AVL 3 §).
+        </p>
+
+        <p th:if="${invoice.notes}" th:text="${invoice.notes}"></p>
+
+        <div class="payment-box">
+            <strong>Maksutiedot</strong>
+            <table class="invoice-meta">
+                <tr><td>Saaja</td><td th:text="${profile.businessName}"></td></tr>
+                <tr><td>IBAN</td><td th:text="${profile.iban}"></td></tr>
+                <tr th:if="${profile.bic}"><td>BIC</td><td th:text="${profile.bic}"></td></tr>
+                <tr><td>Viitenumero</td><td th:text="${invoice.referenceNumber}"></td></tr>
+                <tr><td>Eräpäivä</td><td th:text="${#temporals.format(invoice.dueDate, 'd.M.yyyy')}"></td></tr>
+                <tr><td>Summa</td><td th:text="${#numbers.formatDecimal(invoice.grossTotal, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'"></td></tr>
+            </table>
+        </div>
+
+        <p class="hint" style="margin-top: 2rem">
+            <span th:text="${profile.businessName}"></span>
+            <span th:if="${profile.email}" th:text="'· ' + ${profile.email}"></span>
+            <span th:if="${profile.phone}" th:text="'· ' + ${profile.phone}"></span>
+        </p>
+    </div>
+</main>
+</body>
+</html>

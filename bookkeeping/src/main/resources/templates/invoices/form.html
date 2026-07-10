@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Lasku')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1 th:text="${invoice.id == null} ? 'Uusi lasku' : 'Muokkaa laskua ' + ${invoice.invoiceNumber}">Uusi lasku</h1>
+
+    <p class="hint" th:if="${#lists.isEmpty(customers)}">
+        Sinulla ei ole vielä asiakkaita. <a th:href="@{/customers/new}">Luo asiakas ensin.</a>
+    </p>
+
+    <form th:action="@{/invoices/save}" th:object="${invoice}" method="post">
+        <input type="hidden" th:field="*{id}">
+        <input type="hidden" th:field="*{invoiceNumber}">
+
+        <label for="customer">Asiakas</label>
+        <select name="customer" id="customer">
+            <option value="">– Valitse asiakas –</option>
+            <option th:each="c : ${customers}" th:value="${c.id}"
+                    th:selected="${invoice.customer != null && invoice.customer.id == c.id}"
+                    th:text="${c.name}">Asiakas Oy</option>
+        </select>
+        <span class="field-error" th:if="${#fields.hasErrors('customer')}" th:errors="*{customer}"></span>
+
+        <label for="issueDate">Laskun päivämäärä</label>
+        <input type="date" th:field="*{issueDate}" id="issueDate" required>
+
+        <label for="dueDate">Eräpäivä</label>
+        <input type="date" th:field="*{dueDate}" id="dueDate" required>
+
+        <h2>Laskurivit</h2>
+        <p class="hint">Tyhjät rivit ohitetaan. Yksikköhinta ilman arvonlisäveroa.</p>
+        <p class="hint" th:unless="${vatRegistered}">
+            Et ole alv-rekisterissä, joten kaikki rivit laskutetaan 0 %:n verokannalla.
+        </p>
+        <table>
+            <thead>
+            <tr>
+                <th style="width: 45%">Kuvaus</th>
+                <th>Määrä</th>
+                <th>á-hinta (veroton)</th>
+                <th th:if="${vatRegistered}">ALV %</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="line, stat : *{lines}">
+                <td>
+                    <input type="text" th:field="*{lines[__${stat.index}__].description}"
+                           placeholder="esim. Ohjelmistokehitys 6/2026">
+                </td>
+                <td>
+                    <input type="number" step="0.01" min="0" th:field="*{lines[__${stat.index}__].quantity}">
+                </td>
+                <td>
+                    <input type="number" step="0.01" min="0" th:field="*{lines[__${stat.index}__].unitPrice}">
+                </td>
+                <td th:if="${vatRegistered}">
+                    <select th:name="'lines[' + ${stat.index} + '].vatRate'">
+                        <option th:each="rate : ${vatRates}" th:value="${rate}"
+                                th:selected="${line.vatRate != null && line.vatRate.compareTo(rate) == 0}"
+                                th:text="${#numbers.formatDecimal(rate, 1, 1)} + ' %'">25,5 %</option>
+                    </select>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <label for="notes">Lisätiedot laskulle</label>
+        <textarea th:field="*{notes}" id="notes" rows="2"
+                  placeholder="esim. Viivästyskorko 11,5 %"></textarea>
+
+        <div class="actions">
+            <button class="btn" type="submit">Tallenna luonnos</button>
+            <a class="btn secondary" th:href="@{/invoices}">Peruuta</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

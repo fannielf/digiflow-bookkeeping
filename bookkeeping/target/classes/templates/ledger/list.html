@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="fi">
+<head th:replace="~{fragments :: head('Kirjanpito')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav}"></nav>
+<main>
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <h1 th:text="'Kirjanpito ' + ${year}">Kirjanpito</h1>
+
+    <div class="actions">
+        <a class="btn" th:href="@{/ledger/new}">+ Uusi kirjaus</a>
+        <a class="btn secondary" th:href="@{/ledger(year=${year - 1})}" th:text="'← ' + ${year - 1}">←</a>
+        <a class="btn secondary" th:href="@{/ledger(year=${year + 1})}" th:text="${year + 1} + ' →'">→</a>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <div class="label">Tulot</div>
+            <div class="value" th:text="${#numbers.formatDecimal(incomeTotal, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="label">Menot</div>
+            <div class="value" th:text="${#numbers.formatDecimal(expenseTotal, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'">0,00 €</div>
+        </div>
+        <div class="card">
+            <div class="label">Tulos</div>
+            <div class="value" th:classappend="${result.signum() < 0} ? 'negative' : 'positive'"
+                 th:text="${#numbers.formatDecimal(result, 1, 'WHITESPACE', 2, 'COMMA')} + ' €'">0,00 €</div>
+        </div>
+    </div>
+
+    <p class="hint" th:if="${#lists.isEmpty(entries)}">Ei kirjauksia tälle vuodelle.</p>
+    <table th:unless="${#lists.isEmpty(entries)}">
+        <thead>
+        <tr>
+            <th>Tosite</th>
+            <th>Pvm</th>
+            <th>Laji</th>
+            <th>Selite</th>
+            <th class="num">Veroton</th>
+            <th class="num">ALV %</th>
+            <th class="num">ALV</th>
+            <th class="num">Yhteensä</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="entry : ${entries}">
+            <td th:text="${entry.voucherNumber}">1</td>
+            <td th:text="${#temporals.format(entry.date, 'd.M.yyyy')}">1.1.2026</td>
+            <td>
+                <span class="badge" th:classappend="${entry.type.name() == 'INCOME'} ? 'paid' : 'draft'"
+                      th:text="${entry.type.label}">Tulo</span>
+            </td>
+            <td>
+                <span th:text="${entry.description}">Selite</span>
+                <span class="hint" th:if="${entry.counterparty}" th:text="'– ' + ${entry.counterparty}"></span>
+            </td>
+            <td class="num" th:text="${#numbers.formatDecimal(entry.netAmount, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+            <td class="num" th:text="${#numbers.formatDecimal(entry.vatRate, 1, 1)}">25,5</td>
+            <td class="num" th:text="${#numbers.formatDecimal(entry.vatAmount, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+            <td class="num" th:text="${#numbers.formatDecimal(entry.grossAmount, 1, 'WHITESPACE', 2, 'COMMA')}">0,00</td>
+            <td style="white-space: nowrap">
+                <a class="btn small secondary" th:href="@{/ledger/{id}/edit(id=${entry.id})}">Muokkaa</a>
+                <form class="inline" th:action="@{/ledger/{id}/delete(id=${entry.id})}" method="post"
+                      onsubmit="return confirm('Poistetaanko kirjaus?');">
+                    <button class="btn small danger" type="submit">Poista</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>
