@@ -1,12 +1,12 @@
 # Deploying DigiFlow Books to Google Cloud (Cloud Run + Cloud SQL)
 
-This guide takes the app from your laptop to a public HTTPS URL on Google Cloud.
+This guide takes the app from your laptop to a public HTTPS URL, and covers how to
+update and redeploy afterwards.
 
 **The shape of it:** your app runs as a container on **Cloud Run** (serverless — it
-scales to zero when nobody's using it, so it's nearly free for a hobby project).
-The database is a managed **Cloud SQL for PostgreSQL** instance. Cloud Run talks to
-Cloud SQL over a secure socket, and the DB password lives in **Secret Manager**
-rather than in your code.
+scales to zero when idle, so it's nearly free for a hobby project). The database is a
+managed **Cloud SQL for PostgreSQL** instance. Cloud Run talks to Cloud SQL over a
+secure socket, and the DB password lives in **Secret Manager**, not in your code.
 
 ```
 Browser ──HTTPS──> Cloud Run (your container) ──socket──> Cloud SQL (Postgres)
@@ -14,69 +14,74 @@ Browser ──HTTPS──> Cloud Run (your container) ──socket──> Cloud 
                           └── reads DB_PASS from Secret Manager
 ```
 
-You'll do this once from the terminal. Copy-paste the blocks in order and swap in
-your own values where marked.
+**Where you run these commands:** your Mac's **Terminal** app, from inside the project
+folder. The only thing to install locally is the `gcloud` CLI — Cloud Build compiles
+the code in the cloud using the `Dockerfile`, so you don't need Maven, a JDK, or Docker
+on your machine.
 
 ---
 
 ## What the code changes did
 
-Before you deploy, here's what changed in the repo and why — worth understanding,
-not just running.
+Worth understanding, not just running:
 
-- **`pom.xml`** — added `postgres-socket-factory`. This is Google's library that lets
-  the Postgres JDBC driver connect to Cloud SQL without you managing IP allowlists or
-  SSL certs. It's only exercised by the cloud profile.
-- **`application.yml`** — `server.port` now reads `${PORT:8080}`. Cloud Run tells your
-  app which port to listen on via the `PORT` env var; locally it still defaults to 8080.
-- **`application-cloud.yml`** (new) — a Spring profile named `cloud`. It disables the
-  docker-compose auto-start (no Docker in the container), points the datasource at
-  Cloud SQL via the socket factory, turns on Thymeleaf caching, and reads DB name/user/
-  password from env vars. We activate it by setting `SPRING_PROFILES_ACTIVE=cloud`.
-- **`Dockerfile`** (new) — a two-stage build: stage 1 uses Maven+JDK 21 to build the
-  JAR, stage 2 copies just the JAR onto a small JRE image and runs as a non-root user.
+- **`pom.xml`** — added `postgres-socket-factory`, Google's library that lets the app
+  reach Cloud SQL without managing IPs or SSL certs. Only used by the cloud profile.
+- **`application.yml`** — `server.port` reads `${PORT:8080}`; Cloud Run sets `PORT`.
+- **`application-cloud.yml`** (new) — a Spring profile named `cloud`. Points the
+  datasource at Cloud SQL, disables docker-compose auto-start, enables Thymeleaf
+  caching, and reads DB name/user/password from env vars. Activated with
+  `SPRING_PROFILES_ACTIVE=cloud`.
+- **`Dockerfile`** (new) — two-stage build: Maven+JDK 21 builds the JAR, then a small
+  JRE 21 image runs it as a non-root user.
 - **`.dockerignore` / `.gcloudignore`** — keep build junk out of the image/upload.
-- **`docker-compose.yml`** — fixed the port mapping to `5435:5432` so local dev matches
-  the `localhost:5435` URL in `application.yml`.
+- **`docker-compose.yml`** — fixed the local port mapping to `5435:5432`.
 
 ---
 
-## 0. One-time prerequisites
+# Part 1 — First-time deployment
 
-Install the gcloud CLI and log in:
+Run steps 1–8 in **one Terminal session**. The `export` variables live only in that
+session — if you close it, re-run the `export` lines (steps 3, and the ones in 6–7 that
+capture values) before deploying again.
+
+## 1. Install the CLI and log in
 
 ```bash
-# macOS
 brew install --cask google-cloud-sdk
-
 gcloud auth login
 ```
 
-Pick (or note) these values — you'll reuse them throughout. **Set them as shell
-variables now** so the later commands just work:
+## 2. Go to your project folder
 
 ```bash
-export PROJECT_ID="digiflow-books-$RANDOM"   # must be globally unique; or use your own
-export REGION="europe-north1"                # Finland region, low latency for you
-export SERVICE="digiflow-books"              # Cloud Run service name
-export DB_INSTANCE="digiflow-db"             # Cloud SQL instance name
+cd /Users/fanni.vesanen/projects/digiflow-bookkeeping/bookkeeping
+```
+
+## 3. Set your variables
+
+```bash
+export PROJECT_ID="digiflow-books-$RANDOM"   # must be globally unique
+export REGION="europe-north1"
+export SERVICE="digiflow-books"
+export DB_INSTANCE="digiflow-db"
 export DB_NAME="digiflow_books"
 export DB_USER="books"
 ```
 
-Create the project and link billing (Cloud SQL requires a billing account, though
-this setup stays in/near the free tier for hobby use):
+## 4. Create the project + link billing
 
 ```bash
 gcloud projects create "$PROJECT_ID"
 gcloud config set project "$PROJECT_ID"
 
-# Find your billing account ID, then link it:
 gcloud billing accounts list
 gcloud billing projects link "$PROJECT_ID" --billing-account=XXXXXX-XXXXXX-XXXXXX
 ```
 
-Enable the APIs you'll use:
+Billing is required for Cloud SQL. New accounts get free credits.
+
+## 5. Enable the APIs
 
 ```bash
 gcloud services enable \
@@ -87,9 +92,7 @@ gcloud services enable \
   artifactregistry.googleapis.com
 ```
 
----
-
-## 1. Create the Cloud SQL (PostgreSQL) instance
+## 6. Create the database (takes a few minutes)
 
 ```bash
 gcloud sql instances create "$DB_INSTANCE" \
@@ -97,67 +100,32 @@ gcloud sql instances create "$DB_INSTANCE" \
   --tier=db-f1-micro \
   --region="$REGION" \
   --storage-size=10GB
-```
 
-`db-f1-micro` is the smallest/cheapest tier — fine for this app. Creation takes a
-few minutes.
-
-Create the database and the app's DB user with a password:
-
-```bash
 gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE"
 
-# Generate a strong password and store it in a shell variable for the next steps.
 export DB_PASS="$(openssl rand -base64 24)"
+gcloud sql users create "$DB_USER" --instance="$DB_INSTANCE" --password="$DB_PASS"
 
-gcloud sql users create "$DB_USER" \
-  --instance="$DB_INSTANCE" \
-  --password="$DB_PASS"
-```
-
-Grab the instance connection name — the app needs it (format `project:region:instance`):
-
-```bash
-export INSTANCE_CONNECTION_NAME="$(gcloud sql instances describe "$DB_INSTANCE" \
-  --format='value(connectionName)')"
+export INSTANCE_CONNECTION_NAME="$(gcloud sql instances describe "$DB_INSTANCE" --format='value(connectionName)')"
 echo "$INSTANCE_CONNECTION_NAME"
 ```
 
----
-
-## 2. Store the DB password in Secret Manager
-
-Never put the password in an env var flag or in code. Store it as a secret and let
-Cloud Run mount it:
+## 7. Store the password as a secret + grant access
 
 ```bash
 printf "%s" "$DB_PASS" | gcloud secrets create digiflow-db-pass --data-file=-
-```
 
-Cloud Run runs as your project's **compute service account** by default. Give that
-account permission to read the secret:
-
-```bash
 export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 export RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
 gcloud secrets add-iam-policy-binding digiflow-db-pass \
-  --member="serviceAccount:${RUNTIME_SA}" \
-  --role="roles/secretmanager.secretAccessor"
+  --member="serviceAccount:${RUNTIME_SA}" --role="roles/secretmanager.secretAccessor"
 
-# The same service account needs to talk to Cloud SQL:
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SA}" \
-  --role="roles/cloudsql.client"
+  --member="serviceAccount:${RUNTIME_SA}" --role="roles/cloudsql.client"
 ```
 
----
-
-## 3. Deploy to Cloud Run
-
-This one command builds the container from your `Dockerfile` (via Cloud Build),
-pushes it, and deploys it — wiring in the Cloud SQL connection, the profile, the DB
-env vars, and the secret:
+## 8. Deploy 🚀
 
 ```bash
 gcloud run deploy "$SERVICE" \
@@ -169,93 +137,150 @@ gcloud run deploy "$SERVICE" \
   --set-secrets="DB_PASS=digiflow-db-pass:latest"
 ```
 
-What the flags do:
-
-- `--source .` — build straight from your code; no manual `docker build`/`push` needed.
-- `--allow-unauthenticated` — makes the site publicly reachable. Remove this once you
-  add Spring Security (README roadmap #5) if you want it private.
-- `--add-cloudsql-instances` — attaches the Cloud SQL socket so the socket factory works.
-- `--set-env-vars` — activates the `cloud` profile and feeds the non-secret DB values.
-- `--set-secrets` — mounts the secret as the `DB_PASS` env var the app reads.
-
-When it finishes, gcloud prints a **Service URL** like
-`https://digiflow-books-xxxxx.a.run.app`. Open it — you should see the dashboard.
-
-First load may be a few seconds while Hibernate creates the tables (`ddl-auto: update`).
+When it finishes it prints a **Service URL** (`https://digiflow-books-xxxxx.a.run.app`).
+Open it — the first load takes a few seconds while Hibernate creates the tables.
 
 ---
 
-## 4. Verify
+# Part 2 — Updating the code and redeploying
+
+This is the part you'll use most. **Here's the key point:** Cloud Run remembers the
+config from your first deploy (the env vars, secret, and Cloud SQL attachment). So after
+a code change you do **not** repeat the big command — you just point it at your updated
+code again:
 
 ```bash
-# Tail the logs if anything looks off:
+cd /Users/fanni.vesanen/projects/digiflow-bookkeeping/bookkeeping
+
+gcloud run deploy digiflow-books --source . --region=europe-north1
+```
+
+That one line uploads your current code, rebuilds the container in the cloud, and rolls
+out a new **revision**. If the build succeeds, traffic switches to it automatically; if
+it fails, your old revision keeps serving — so a broken build never takes the site down.
+
+The typical loop:
+
+```bash
+# 1. make your code changes and commit them (good habit)
+git add -A && git commit -m "Add receipt attachments"
+
+# 2. redeploy
+gcloud run deploy digiflow-books --source . --region=europe-north1
+
+# 3. open the URL and check it, or tail logs (see below)
+```
+
+**When you DO need the longer command again:** only if you're *changing configuration* —
+e.g. adding a new env var or a new secret. To add/update a single env var without wiping
+the others, use `--update-env-vars` (not `--set-env-vars`, which replaces them all):
+
+```bash
+gcloud run services update digiflow-books --region=europe-north1 \
+  --update-env-vars="SOME_NEW_VAR=value"
+```
+
+---
+
+# Part 3 — Useful commands cheat-sheet
+
+Set these once per Terminal session so the commands below are short:
+
+```bash
+export SERVICE="digiflow-books"
+export REGION="europe-north1"
+export DB_INSTANCE="digiflow-db"
+```
+
+### See what's happening
+
+```bash
+# The public URL of your service
+gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)'
+
+# Live logs (add --limit=50 for the last 50 lines instead of a stream)
 gcloud run services logs read "$SERVICE" --region="$REGION" --limit=50
+
+# Full service config: env vars, secrets, image, revision
+gcloud run services describe "$SERVICE" --region="$REGION"
 ```
 
-Then in the app: **Asetukset** → fill in business details → **Asiakkaat** → add a
-customer → **Laskut** → create an invoice. If that persists across a page reload,
-the database wiring is good.
+### Revisions and rollback
 
----
-
-## Redeploying after code changes
-
-Just rerun the deploy command — same line as step 3:
+Every deploy creates a revision. If a new one misbehaves, roll straight back:
 
 ```bash
-gcloud run deploy "$SERVICE" --source . --region="$REGION" \
-  --allow-unauthenticated \
-  --add-cloudsql-instances="$INSTANCE_CONNECTION_NAME" \
-  --set-env-vars="SPRING_PROFILES_ACTIVE=cloud,INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME},DB_NAME=${DB_NAME},DB_USER=${DB_USER}" \
-  --set-secrets="DB_PASS=digiflow-db-pass:latest"
+# List revisions (newest first)
+gcloud run revisions list --service="$SERVICE" --region="$REGION"
+
+# Send 100% of traffic back to a known-good revision
+gcloud run services update-traffic "$SERVICE" --region="$REGION" \
+  --to-revisions=digiflow-books-00002-abc=100
 ```
 
----
-
-## Cost & cleanup
-
-Cloud Run scales to zero, so it costs ~nothing when idle. The `db-f1-micro` Cloud SQL
-instance is the main cost — a few euros a month, and **it bills even when idle**
-because the DB is always on.
-
-To stop the DB billing when you're not using it:
+### Secrets
 
 ```bash
-gcloud sql instances patch "$DB_INSTANCE" --activation-policy=NEVER   # stop
-gcloud sql instances patch "$DB_INSTANCE" --activation-policy=ALWAYS  # start again
+# View the current DB password
+gcloud secrets versions access latest --secret=digiflow-db-pass
+
+# Rotate it: set a new DB password AND store it as a new secret version
+NEW_PASS="$(openssl rand -base64 24)"
+gcloud sql users set-password books --instance="$DB_INSTANCE" --password="$NEW_PASS"
+printf "%s" "$NEW_PASS" | gcloud secrets versions add digiflow-db-pass --data-file=-
+gcloud run deploy "$SERVICE" --source . --region="$REGION"   # redeploy to pick it up
 ```
 
-To tear everything down:
+### Connect to the database directly
+
+```bash
+# Opens a psql prompt to your Cloud SQL instance (asks for the password)
+gcloud sql connect "$DB_INSTANCE" --user=books --database=digiflow_books
+```
+
+### Cost control
+
+Cloud Run scales to zero (≈free when idle). The `db-f1-micro` Cloud SQL instance is the
+main cost — a few euros/month, and **it bills even when idle** because the DB stays on.
+
+```bash
+# Pause the DB when you're not using it
+gcloud sql instances patch "$DB_INSTANCE" --activation-policy=NEVER
+
+# Start it again
+gcloud sql instances patch "$DB_INSTANCE" --activation-policy=ALWAYS
+```
+
+### Tear everything down
 
 ```bash
 gcloud run services delete "$SERVICE" --region="$REGION"
 gcloud sql instances delete "$DB_INSTANCE"
 gcloud secrets delete digiflow-db-pass
-# or nuke the whole project:
+# or delete the whole project:
 gcloud projects delete "$PROJECT_ID"
 ```
 
 ---
 
-## Troubleshooting
+# Troubleshooting
 
-- **App won't start, logs mention the datasource** — check that all four of
-  `INSTANCE_CONNECTION_NAME`, `DB_NAME`, `DB_USER` (env vars) and `DB_PASS` (secret)
-  are set on the service: `gcloud run services describe $SERVICE --region=$REGION`.
-- **"permission denied" for Cloud SQL or the secret** — the two IAM bindings in step 2
-  didn't apply to the runtime service account. Re-run them and redeploy.
-- **Build fails** — run `mvn clean package -DskipTests` locally first; the Docker build
-  runs the same steps.
-- **Timeout on first request** — Hibernate is creating tables. Reload after a moment.
+- **App won't start, logs mention the datasource** — confirm the service has all four of
+  `INSTANCE_CONNECTION_NAME`, `DB_NAME`, `DB_USER` (env vars) and `DB_PASS` (secret):
+  `gcloud run services describe $SERVICE --region=$REGION`.
+- **"permission denied" for Cloud SQL or the secret** — re-run the two IAM bindings in
+  step 7, then redeploy.
+- **Build fails** — read the Cloud Build output in the deploy log; the error is usually
+  a compile error in your change.
+- **Timeout on first request** — Hibernate is creating tables; reload after a moment.
 
 ---
 
-## Good next steps (from the README roadmap)
+# Good next steps (from the README roadmap)
 
-Deploying naturally sets up the next lessons:
-
-1. **Flyway migrations** — once real data is in Cloud SQL, `ddl-auto: update` gets risky.
-   Versioned migrations + `validate` is the professional pattern.
-2. **Spring Security** — add a login, then drop `--allow-unauthenticated` or gate it,
-   so your books aren't world-readable.
-3. **CI** — move the `mvn test` + deploy into GitHub Actions so pushing to `main` deploys.
+1. **Flyway migrations** — once real data lives in Cloud SQL, `ddl-auto: update` gets
+   risky. Versioned migrations + `validate` is the professional pattern.
+2. **Spring Security** — add a login, then drop `--allow-unauthenticated` so your books
+   aren't world-readable.
+3. **CI/CD with GitHub Actions** — move the test + deploy into a workflow so pushing to
+   `main` deploys automatically. This is the natural upgrade from redeploying by hand.
