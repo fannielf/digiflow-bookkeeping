@@ -1,0 +1,10 @@
+# Files not uploaded to Cloud Build when running `gcloud run deploy --source .`
+.git/
+.gitignore
+.idea/
+*.iml
+target/
+.DS_Store
+*.log
+README.md
+DEPLOY-GCP.md

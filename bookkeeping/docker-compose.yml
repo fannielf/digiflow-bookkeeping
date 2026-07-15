@@ -6,8 +6,10 @@ services:
       POSTGRES_DB: digiflow_books
       POSTGRES_USER: books
       POSTGRES_PASSWORD: books
+    # Host 5435 -> container 5432 (Postgres' real port). This matches the
+    # localhost:5435 URL in application.yml.
     ports:
-      - "5435:5435"
+      - "5435:5432"
     volumes:
       - books_data:/var/lib/postgresql/data
 

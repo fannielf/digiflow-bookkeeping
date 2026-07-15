@@ -16,4 +16,5 @@ spring:
     cache: false
 
 server:
-  port: 8080
+  # Cloud Run injects the PORT env var (usually 8080). Fall back to 8080 locally.
+  port: ${PORT:8080}

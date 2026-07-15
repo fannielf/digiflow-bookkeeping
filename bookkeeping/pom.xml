@@ -43,6 +43,13 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Lets the app connect to Cloud SQL from Cloud Run without the proxy sidecar.
+             Only used by the 'cloud' profile; harmless locally. -->
+        <dependency>
+            <groupId>com.google.cloud.sql</groupId>
+            <artifactId>postgres-socket-factory</artifactId>
+            <version>1.28.1</version>
+        </dependency>
         <!-- Starts the Postgres container from docker-compose.yml automatically on app start.
              Remove this dependency if you prefer to manage Postgres yourself. -->
         <dependency>
